@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import { Session } from '../../models/Session.js';
 import { Query } from '../../models/Query.js';
 import { fireImmediate } from '../../services/pollution.js';
+import { isBrowserActive } from '../../services/browser.js';
+import { getActiveSessions } from '../../services/pollution.js';
 import { CATEGORY_NAMES } from '../../data/queries.js';
 
 const router = Router();
@@ -24,6 +26,14 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
+  if (isBrowserActive()) {
+    res.status(409).json({
+      error: 'Browser is already in use by another session',
+      activeSessions: getActiveSessions(),
+    });
+    return;
+  }
+
   const session = await Session.create({
     status: 'running',
     config: { intervalMin: 0, batchSize: count, categories },
@@ -40,10 +50,7 @@ router.post('/', async (req: Request, res: Response) => {
     const queries = await Query.find({ sessionId: session.id }).sort({ firedAt: 1 });
     res.json({ sessionId: session.id, queries });
   } catch (error) {
-    await Session.findByIdAndUpdate(session.id, {
-      status: 'error',
-      endedAt: new Date(),
-    });
+    await Session.findByIdAndUpdate(session.id, { status: 'error', endedAt: new Date() });
     throw error;
   }
 });

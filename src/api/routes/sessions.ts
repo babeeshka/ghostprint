@@ -1,21 +1,29 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import cron from 'node-cron';
 import { Session } from '../../models/Session.js';
 import { Query } from '../../models/Query.js';
-import { runSession, stopSession, isSessionActive } from '../../services/pollution.js';
+import { runSession, stopSession, getActiveSessions } from '../../services/pollution.js';
+import { isBrowserActive } from '../../services/browser.js';
 import { CATEGORY_NAMES } from '../../data/queries.js';
 
 const router = Router();
 
 router.post('/', async (req: Request, res: Response) => {
-  const { intervalMin = 10, batchSize = 5, categories = [] } = req.body as {
+  const { intervalMin = 10, batchSize = 5, categories = [], cronExpr } = req.body as {
     intervalMin?: number;
     batchSize?: number;
     categories?: string[];
+    cronExpr?: string;
   };
 
   if (batchSize < 1 || batchSize > 50) {
     res.status(400).json({ error: 'batchSize must be between 1 and 50' });
+    return;
+  }
+
+  if (cronExpr !== undefined && !cron.validate(cronExpr)) {
+    res.status(400).json({ error: `Invalid cron expression: "${cronExpr}"` });
     return;
   }
 
@@ -25,22 +33,35 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
+  if (isBrowserActive()) {
+    res.status(409).json({
+      error: 'Browser is already in use by another session',
+      activeSessions: getActiveSessions(),
+    });
+    return;
+  }
+
   const session = await Session.create({
     status: 'running',
-    config: { intervalMin, batchSize, categories },
+    config: { intervalMin: cronExpr ? 0 : intervalMin, batchSize, categories },
   });
 
-  // Run in background — do not await
-  runSession(session.id as string, { intervalMin, batchSize, categories }).catch(err =>
+  runSession(session.id as string, { intervalMin, batchSize, categories, cronExpr }).catch(err =>
     console.error(`Session ${session.id} background error:`, err)
   );
 
   res.status(201).json({ session });
 });
 
-router.get('/', async (_req: Request, res: Response) => {
-  const sessions = await Session.find().sort({ startedAt: -1 }).limit(100);
-  res.json({ sessions });
+router.get('/', async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 200);
+  const skip = parseInt((req.query.skip as string) ?? '0', 10);
+  const sessions = await Session.find()
+    .sort({ startedAt: -1 })
+    .skip(skip)
+    .limit(limit);
+  const total = await Session.countDocuments();
+  res.json({ sessions, total, limit, skip });
 });
 
 router.get('/:id', async (req: Request, res: Response) => {
@@ -60,18 +81,16 @@ router.post('/:id/stop', async (req: Request, res: Response) => {
     return;
   }
 
+  if (session.status !== 'running') {
+    res.status(400).json({ error: `Session is already in status "${session.status}"` });
+    return;
+  }
+
   const aborted = stopSession(req.params.id);
 
   if (!aborted) {
-    if (session.status === 'running') {
-      await Session.findByIdAndUpdate(req.params.id, {
-        status: 'stopped',
-        endedAt: new Date(),
-      });
-      res.json({ success: true, message: 'Session marked stopped (was not active in this process)' });
-    } else {
-      res.status(400).json({ error: `Session is already in status "${session.status}"` });
-    }
+    await Session.findByIdAndUpdate(req.params.id, { status: 'stopped', endedAt: new Date() });
+    res.json({ success: true, message: 'Session marked stopped (was not active in this process)' });
     return;
   }
 

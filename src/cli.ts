@@ -23,10 +23,11 @@ program
 
 program
   .command('start')
-  .description('Start a pollution session — fires queries in batches on a recurring interval')
-  .option('--interval <minutes>', 'Minutes between batches', '10')
+  .description('Start a pollution session — fires queries in batches on a recurring schedule')
+  .option('--interval <minutes>', 'Minutes between batches (mutually exclusive with --cron)', '10')
   .option('--batch <count>', 'Queries per batch', '5')
   .option('--categories <list>', 'Comma-separated category names (default: all)')
+  .option('--cron <expr>', 'Cron expression for scheduling batches, e.g. "0 23 * * *"')
   .action(start);
 
 program

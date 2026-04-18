@@ -4,3 +4,7 @@ dist/
 *.log
 .DS_Store
 .claude/settings.local.json
+commandments.md
+CLAUDE.md
+DEVELOPMENT.md
+CHANGELOG.md

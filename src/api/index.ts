@@ -4,9 +4,11 @@ import sessionsRouter from './routes/sessions.js';
 import fireRouter from './routes/fire.js';
 import statsRouter from './routes/stats.js';
 import categoriesRouter from './routes/categories.js';
+import healthRouter from './routes/health.js';
 
 const router = Router();
 
+router.use('/health', healthRouter);
 router.use('/sessions', sessionsRouter);
 router.use('/fire', fireRouter);
 router.use('/stats', statsRouter);

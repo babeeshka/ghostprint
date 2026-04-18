@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { connectDb, disconnectDb } from '../db.js';
 import { Session } from '../models/Session.js';
 import { fireImmediate } from '../services/pollution.js';
@@ -12,7 +13,7 @@ export async function fire(opts: FireOptions): Promise<void> {
   const count = parseInt(opts.count, 10);
 
   if (isNaN(count) || count < 1 || count > 20) {
-    console.error('--count must be between 1 and 20');
+    console.error(chalk.red('--count must be between 1 and 20'));
     process.exit(1);
   }
 
@@ -22,8 +23,8 @@ export async function fire(opts: FireOptions): Promise<void> {
 
   const invalidCategories = categories.filter(c => !CATEGORY_NAMES.includes(c));
   if (invalidCategories.length > 0) {
-    console.error(`Unknown categories: ${invalidCategories.join(', ')}`);
-    console.error(`Valid categories: ${CATEGORY_NAMES.join(', ')}`);
+    console.error(chalk.red(`Unknown categories: ${invalidCategories.join(', ')}`));
+    console.error(chalk.dim(`Valid: ${CATEGORY_NAMES.join(', ')}`));
     process.exit(1);
   }
 
@@ -34,7 +35,8 @@ export async function fire(opts: FireOptions): Promise<void> {
     config: { intervalMin: 0, batchSize: count, categories },
   });
 
-  console.log(`Firing ${count} quer${count === 1 ? 'y' : 'ies'} immediately...\n`);
+  const catLabel = categories.length > 0 ? categories.join(',') : 'all';
+  console.log(chalk.bold(`Firing ${count} quer${count === 1 ? 'y' : 'ies'} [${catLabel}]...\n`));
 
   try {
     await fireImmediate(session.id as string, count, categories);
@@ -44,10 +46,10 @@ export async function fire(opts: FireOptions): Promise<void> {
       endedAt: new Date(),
     });
 
-    console.log(`\nDone — session ${session.id}`);
+    console.log(`\n${chalk.green('✓')} Done — session ${chalk.dim(session.id as string)}`);
   } catch (error) {
     await Session.findByIdAndUpdate(session.id, { status: 'error', endedAt: new Date() });
-    console.error('Fire failed:', error instanceof Error ? error.message : error);
+    console.error(chalk.red('Fire failed:'), error instanceof Error ? error.message : error);
     process.exit(1);
   } finally {
     await disconnectDb();

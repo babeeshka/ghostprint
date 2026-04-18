@@ -5,6 +5,10 @@ import { randomInt, sleep } from './randomizer.js';
 
 let activeBrowserContext: BrowserContext | null = null;
 
+export function isBrowserActive(): boolean {
+  return activeBrowserContext !== null;
+}
+
 export async function launchBrowser(): Promise<BrowserContext> {
   if (activeBrowserContext) {
     throw new Error('Browser context already active — call closeBrowser() first');

@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { connectDb, disconnectDb } from '../db.js';
 import { Session } from '../models/Session.js';
 import { getActiveSessions } from '../services/pollution.js';
@@ -6,16 +7,17 @@ export async function status(): Promise<void> {
   await connectDb();
 
   const activeIds = getActiveSessions();
-  const recentSessions = await Session.find().sort({ startedAt: -1 }).limit(5);
 
   if (activeIds.length > 0) {
-    console.log(`Active sessions in this process: ${activeIds.join(', ')}`);
+    console.log(chalk.green(`Active sessions in this process: ${activeIds.join(', ')}`));
   } else {
-    console.log('No active sessions in this process');
+    console.log(chalk.dim('No active sessions in this process'));
   }
 
+  const recentSessions = await Session.find().sort({ startedAt: -1 }).limit(5);
+
   if (recentSessions.length === 0) {
-    console.log('No sessions in database');
+    console.log(chalk.dim('No sessions in database'));
     await disconnectDb();
     return;
   }
@@ -25,8 +27,17 @@ export async function status(): Promise<void> {
     const duration = s.endedAt
       ? `${Math.round((s.endedAt.getTime() - s.startedAt.getTime()) / 1000)}s`
       : 'ongoing';
+
+    const statusColor =
+      s.status === 'running' ? chalk.green :
+      s.status === 'stopped' ? chalk.yellow :
+      s.status === 'error'   ? chalk.red :
+                               chalk.dim;
+
     console.log(
-      `  ${s.id}  ${s.status.padEnd(10)}  queries=${s.queriesFired}  duration=${duration}  started=${s.startedAt.toLocaleString()}`
+      `  ${chalk.dim(s.id as string)}  ${statusColor(s.status.padEnd(10))}  ` +
+      `queries=${chalk.cyan(s.queriesFired.toString())}  duration=${duration}  ` +
+      `started=${s.startedAt.toLocaleString()}`
     );
   }
 

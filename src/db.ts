@@ -24,3 +24,19 @@ export async function disconnectDb(): Promise<void> {
   await mongoose.disconnect();
   connectionState = 'disconnected';
 }
+
+/**
+ * On process startup, any sessions left in 'running' state are stale —
+ * they belong to a previous process that crashed or was killed. Mark them
+ * as 'error' so status/stats are accurate.
+ */
+export async function recoverStaleSessions(): Promise<void> {
+  const { Session } = await import('./models/Session.js');
+  const result = await Session.updateMany(
+    { status: 'running' },
+    { status: 'error', endedAt: new Date() }
+  );
+  if (result.modifiedCount > 0) {
+    console.warn(`Recovered ${result.modifiedCount} stale session(s) from previous run`);
+  }
+}
