@@ -1,9 +1,8 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { Session } from '../../models/Session.js';
-import { Query } from '../../models/Query.js';
 import { fireImmediate } from '../../services/pollution.js';
-import { isBrowserActive } from '../../services/browser.js';
+import { isBrowserActive, } from '../../services/browser.js';
 import { getActiveSessions } from '../../services/pollution.js';
 import { CATEGORY_NAMES } from '../../data/queries.js';
 
@@ -39,20 +38,21 @@ router.post('/', async (req: Request, res: Response) => {
     config: { intervalMin: 0, batchSize: count, categories },
   });
 
-  try {
-    await fireImmediate(session.id as string, count, categories);
-
-    await Session.findByIdAndUpdate(session.id, {
-      status: 'completed',
-      endedAt: new Date(),
+  // Fire in background — respond immediately with the session ID so the
+  // caller can poll GET /sessions/:id for results rather than waiting minutes.
+  fireImmediate(session.id as string, count, categories)
+    .then(() =>
+      Session.findByIdAndUpdate(session.id, { status: 'completed', endedAt: new Date() })
+    )
+    .catch(err => {
+      console.error(`fire job ${session.id} failed:`, err);
+      return Session.findByIdAndUpdate(session.id, { status: 'error', endedAt: new Date() });
     });
 
-    const queries = await Query.find({ sessionId: session.id }).sort({ firedAt: 1 });
-    res.json({ sessionId: session.id, queries });
-  } catch (error) {
-    await Session.findByIdAndUpdate(session.id, { status: 'error', endedAt: new Date() });
-    throw error;
-  }
+  res.status(202).json({
+    sessionId: session.id,
+    message: 'Firing in background — poll GET /sessions/:id for results',
+  });
 });
 
 export default router;

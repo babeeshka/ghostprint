@@ -56,11 +56,19 @@ router.post('/', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   const limit = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 200);
   const skip = parseInt((req.query.skip as string) ?? '0', 10);
-  const sessions = await Session.find()
-    .sort({ startedAt: -1 })
-    .skip(skip)
-    .limit(limit);
-  const total = await Session.countDocuments();
+  const validStatuses = ['running', 'stopped', 'completed', 'error'];
+  const statusFilter = req.query.status as string | undefined;
+
+  if (statusFilter && !validStatuses.includes(statusFilter)) {
+    res.status(400).json({ error: `Invalid status filter. Valid values: ${validStatuses.join(', ')}` });
+    return;
+  }
+
+  const filter = statusFilter ? { status: statusFilter } : {};
+  const [sessions, total] = await Promise.all([
+    Session.find(filter).sort({ startedAt: -1 }).skip(skip).limit(limit),
+    Session.countDocuments(filter),
+  ]);
   res.json({ sessions, total, limit, skip });
 });
 
